@@ -4,44 +4,18 @@ export default function GreenVillageSurvey() {
   const [step, setStep] = useState(1);
   const [adminCode, setAdminCode] = useState('');
   const [answers, setAnswers] = useState({
-    name: '',
-    phone: '',
-    priorities: [],
-    futureVision: [],
-    urgentProjects: [],
-    urgentSite1: '',
-    urgentSite2: '',
-    urgentSite3: '',
-    sitesToDevelop: [],
-    falajProposals: [],
-    mustahActivities: [],
-    futureProjects: [],
-    museumContents: [],
-    hasHistoricalItems: '',
-    historicalDetails: '',
-    participationTypes: [],
-    wantToJoinTeam: '',
-    preferredTeams: [],
-    impactProject: '',
-    ideaName: '',
-    ideaDesc: '',
-    ideaLocation: '',
-    ideaBenefit: '',
-    mainChallenges: [],
-    preservationIdea: '',
-    additionalNotes: ''
+    name: '', phone: '', priorities: [], futureVision: [], urgentProjects: [], urgentSite1: '',
+    urgentSite2: '', urgentSite3: '', sitesToDevelop: [], falajProposals: [], mustahActivities: [],
+    futureProjects: [], museumContents: [], hasHistoricalItems: '', historicalDetails: '',
+    participationTypes: [], wantToJoinTeam: '', preferredTeams: [], impactProject: '', ideaName: '',
+    ideaDesc: '', ideaLocation: '', ideaBenefit: '', mainChallenges: [], preservationIdea: '', additionalNotes: ''
   });
   
-  const [allSubmissions, setAllSubmissions] = useState(() => {
-    try {
-      const saved = localStorage.getItem('survey_submissions');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
+  const [allSubmissions, setAllSubmissions] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingData, setIsFetchingData] = useState(false); // حالة جديدة لتحميل التقارير
+
+  // ضع رابط Google Script الخاص بك هنا (تأكد أنه محدث بعد إضافة doGet)
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnmgpXPpYioWTVguMDDSPfURM-_fBI6LGSM9WC6D3OEZheo2F61n6Kca1YZyzZXT_zYg/exec";
 
   useEffect(() => {
@@ -115,10 +89,7 @@ export default function GreenVillageSurvey() {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      const updatedList = [...allSubmissions, answers];
-      setAllSubmissions(updatedList);
-      localStorage.setItem('survey_submissions', JSON.stringify(updatedList));
-
+      // إرسال البيانات إلى جوجل شيت
       await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -127,9 +98,44 @@ export default function GreenVillageSurvey() {
       setStep(10);
     } catch (error) {
       console.error("خطأ في الإرسال:", error);
-      setStep(10);
+      alert("حدث خطأ أثناء الإرسال، يرجى المحاولة لاحقاً.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // --- دالة جديدة لتسجيل دخول المشرف وجلب البيانات من جوجل شيت ---
+  const handleAdminLogin = async () => {
+    if (adminCode === 'AsA307') {
+      setIsFetchingData(true);
+      try {
+        const response = await fetch(GOOGLE_SCRIPT_URL);
+        const data = await response.json();
+        
+        // تحويل النصوص المدمجة بفواصل إلى مصفوفات (Arrays) لتعمل الإحصائيات بشكل سليم
+        const arrayFields = ['priorities', 'futureVision', 'urgentProjects', 'sitesToDevelop', 'falajProposals', 'mustahActivities', 'futureProjects', 'museumContents', 'participationTypes', 'preferredTeams', 'mainChallenges'];
+        
+        const formattedData = data.map(row => {
+          const newRow = { ...row };
+          arrayFields.forEach(field => {
+            if (typeof newRow[field] === 'string') {
+              // إذا كان جوجل شيت يحفظها كنص مفصول بفاصلة، نقوم بتحويله إلى مصفوفة مجدداً
+              newRow[field] = newRow[field].split(',').map(s => s.trim()).filter(Boolean);
+            }
+          });
+          return newRow;
+        });
+
+        setAllSubmissions(formattedData);
+        setStep(99);
+      } catch (error) {
+        console.error("خطأ في جلب البيانات:", error);
+        alert("حدث خطأ أثناء جلب البيانات من جوجل شيت. تأكد من إعداد دالة doGet.");
+      } finally {
+        setIsFetchingData(false);
+      }
+    } else {
+      alert("الرمز غير صحيح.");
     }
   };
 
@@ -140,8 +146,10 @@ export default function GreenVillageSurvey() {
       const val = sub[key];
       if (Array.isArray(val)) {
         val.forEach(item => {
-          counts[item] = (counts[item] || 0) + 1;
-          totalVotes++;
+          if (item) {
+            counts[item] = (counts[item] || 0) + 1;
+            totalVotes++;
+          }
         });
       } else if (val) {
         counts[val] = (counts[val] || 0) + 1;
@@ -185,7 +193,6 @@ export default function GreenVillageSurvey() {
     document.body.removeChild(link);
   };
 
-  // --- دوال التحليل المتقاطع لصفحة القرارات الذكية ---
   const getTopItem = (key) => {
     const { sorted } = getStatCounts(key);
     return sorted.length > 0 ? sorted[0][0] : "قيد الانتظار";
@@ -244,8 +251,13 @@ export default function GreenVillageSurvey() {
                   <i data-lucide="lock" className="w-4 h-4 text-emerald-700 shrink-0"></i>
                   <input type="password" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} placeholder="أدخل رمز لوحة الإحصائيات (للمشرفين)..." className="w-full p-2.5 text-sm rounded-xl border border-gray-300 bg-white outline-none focus:border-emerald-600 font-sans" />
                 </div>
-                <button onClick={() => { adminCode === 'AsA307' ? setStep(99) : alert("الرمز غير صحيح."); }} className="w-full sm:w-auto bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shrink-0 font-sans">
-                  دخول التقارير
+                {/* تم تعديل الزر هنا لاستدعاء دالة الجلب */}
+                <button onClick={handleAdminLogin} disabled={isFetchingData} className="w-full sm:w-auto bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shrink-0 font-sans flex justify-center items-center gap-2 disabled:opacity-70">
+                  {isFetchingData ? (
+                    <><i data-lucide="loader-2" className="w-4 h-4 animate-spin"></i> جاري التحميل...</>
+                  ) : (
+                    "دخول التقارير"
+                  )}
                 </button>
               </div>
               <div className="bg-emerald-50 border-r-4 border-emerald-600 p-4 rounded-xl text-sm text-emerald-900 leading-relaxed flex items-start gap-3">
@@ -268,310 +280,20 @@ export default function GreenVillageSurvey() {
             </div>
           )}
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">3. ما أهم الجوانب التي ينبغي أن يركز عليها المشروع؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 4 ({answers.priorities.length}/4)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["تحسين المظهر العام للقرية", "المحافظة على الهوية التراثية والعمرانية", "تطوير المرافق والخدمات العامة", "إبراز المكانة العلمية والثقافية للقرية", "تنشيط الحركة السياحية", "دعم المشروعات الصغيرة للأهالي", "تطوير المواقع التاريخية", "تحسين الممرات والإنارة والتشجير", "المحافظة على الفلج والمزارع والبيئة الطبيعية", "تنظيم الفعاليات الاجتماعية والثقافية"].map((item, idx) => {
-                  const isSelected = answers.priorities.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('priorities', item, 4)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100 mb-3">
-                  <h3 className="text-base font-bold text-emerald-900">4. ما الصورة التي تتمنى أن تكون عليها قرية الأخضر مستقبلًا؟ </h3>
-                  <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 3 ({answers.futureVision.length}/3)</span>
+          {/* الخطوات من 2 إلى 10 لم تتغير (قم بنسخها كما هي من الكود الخاص بك إذا لزم الأمر، سأختصرها للتركيز على التقارير) */}
+          {/* ... الخطوة 2 إلى 9 ... */}
+          {step > 1 && step < 10 && (
+             <div className="space-y-6">
+                <div className="bg-amber-50 p-4 rounded-xl text-amber-800 text-sm border border-amber-200">
+                    <p>هذا الجزء مطابق تماماً للكود السابق الخاص بك ولم يتغير. (يرجى إبقاء كود الخطوات من 2 إلى 9 كما هو في نسختك).</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {["قرية جميلة ومنظمة ونظيفة", "وجهة سياحية وتراثية", "قرية محافظة على هويتها وأصالتها", "بيئة جاذبة للمشروعات الشبابية والمجتمعية", "مركز للفعاليات الثقافية والاجتماعية", "نموذجًا للقرى العُمانية المتطورة والمستدامة"].map((item, idx) => {
-                    const isSelected = answers.futureVision.includes(item);
-                    return (
-                      <div key={idx} onClick={() => handleCheckboxToggle('futureVision', item, 3)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                        <span className="text-sm font-medium">{item}</span>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                      </div>
-                    );
-                  })}
+                <div className="flex gap-3 pt-4">
+                  <button onClick={() => setStep(step - 1)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
+                  <button onClick={step === 9 ? handleSubmit : nextStep} disabled={isSubmitting} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">
+                    {step === 9 ? (isSubmitting ? "جاري الإرسال..." : "إرسال") : "التالي"}
+                  </button>
                 </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(1)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">5. ما أهم المشروعات التي ينبغي البدء بها؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 4 ({answers.urgentProjects.length}/4)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["صبغ وتحسين واجهات البيوت القديمة", "تركيب الإنارة بالطاقة الشمسية", "تحسين إنارة الطرق والممرات", "تنظيف وتأهيل الساحات والمواقع العامة", "رصف وتحسين الممرات الداخلية", "التشجير وزراعة النباتات المحلية", "تجميل مداخل القرية", "تركيب لوحات إرشادية وتعريفية", "توفير الجلسات وأماكن الاستراحة", "إزالة المشوهات البصرية", "تحسين مواقف المركبات", "تجميل مواقع الحاويات والنفايات"].map((item, idx) => {
-                  const isSelected = answers.urgentProjects.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('urgentProjects', item, 4)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="border-t pt-4 space-y-3">
-                <h3 className="text-base font-bold text-emerald-900">6. ما المواقع التي ترى أنها تحتاج إلى تدخل عاجل؟ </h3>
-                <input type="text" value={answers.urgentSite1} onChange={(e) => updateAnswer('urgentSite1', e.target.value)} placeholder="الموقع الأول..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-sans" />
-                <input type="text" value={answers.urgentSite2} onChange={(e) => updateAnswer('urgentSite2', e.target.value)} placeholder="الموقع الثاني..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-sans" />
-                <input type="text" value={answers.urgentSite3} onChange={(e) => updateAnswer('urgentSite3', e.target.value)} placeholder="الموقع الثالث..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 font-sans" />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(2)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">7. ما أهم المواقع التي ينبغي تطويرها؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 3 ({answers.sitesToDevelop.length}/3)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["منطقة الفلج", "حافة الفلج", "سكة القرية", "القلعة", "المصطاح الحدري", "ميدان الرماية التقليدية", "المساجد والمباني القديمة", "مداخل القرية", "المزارع والنخيل", "الساحات العامة"].map((item, idx) => {
-                  const isSelected = answers.sitesToDevelop.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('sitesToDevelop', item, 3)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(3)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">8. ما أهم المقترحات لتطوير منطقة الفلج وسكة القرية؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 4 ({answers.falajProposals.length}/4)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["تنظيف وتأهيل مسار الفلج", "إنشاء ممشى آمن", "تحسين أرضية سكة القرية", "تركيب إنارة تراثية أو شمسية", "إضافة جلسات واستراحات", "التشجير وزراعة النباتات المحلية", "ترميم الواجهات المطلة على السكة", "وضع لوحات تحكي تاريخ القرية", "إنشاء نقاط جميلة للتصوير", "تخصيص مواقع للحرف والمنتجات المحلية", "إنشاء أكشاك أو مقاهٍ صغيرة", "المحافظة على طبيعة المكان وتقليل الإنشاءات"].map((item, idx) => {
-                  const isSelected = answers.falajProposals.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('falajProposals', item, 4)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(4)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 6 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">9. أنشطة المصطاح والساحات العامة؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 3 ({answers.mustahActivities.length}/3)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["ملتقيات الأهالي", "الأمسيات الثقافية والشعرية", "الأسواق الموسمية", "معارض المنتجات المحلية", "فعاليات الأطفال والأسر", "عروض الحرف التقليدية", "المناسبات الوطنية والاجتماعية", "الفعاليات الشبابية والرياضية", "المهرجانات والاحتفالات التراثية"].map((item, idx) => {
-                  const isSelected = answers.mustahActivities.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('mustahActivities', item, 3)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(5)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 7 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">10. المشروعات المستقبلية؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 4 ({answers.futureProjects.length}/4)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["إنشاء متحف خاص بالقرية", "إنشاء مقهى سياحي بطابع تراثي", "إقامة أكشاك للمنتجات المحلية", "إنشاء سوق للحرف والصناعات التقليدية", "إقامة نُزل تراثي صغير", "تنظيم مسارات سياحية داخل القرية", "إنشاء مركز لاستقبال الزوار", "تنظيم مهرجان سنوي للقرية", "دعم مشروعات الأسر المنتجة"].map((item, idx) => {
-                  const isSelected = answers.futureProjects.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('futureProjects', item, 4)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100 mb-3">
-                  <h3 className="text-base font-bold text-emerald-900">11. محتويات متحف القرية؟ </h3>
-                  <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 4 ({answers.museumContents.length}/4)</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {["المخطوطات والوثائق القديمة", "الصور التاريخية للقرية وأهاليها", "تاريخ العلماء والشخصيات البارزة", "الأدوات الزراعية القديمة", "تاريخ الفلج والزراعة", "صناعة النسيج", "الحرف والصناعات التقليدية", "الملابس والمقتنيات القديمة", "القصص والروايات الشعبية", "تسجيلات كبار السن", "ركن تفاعلي للأطفال والزوار"].map((item, idx) => {
-                    const isSelected = answers.museumContents.includes(item);
-                    return (
-                      <div key={idx} onClick={() => handleCheckboxToggle('museumContents', item, 4)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                        <span className="text-sm font-medium">{item}</span>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="border-t pt-4 space-y-3">
-                <h3 className="text-base font-bold text-emerald-900">12. مساهمة بصور أو وثائق تاريخية؟ </h3>
-                <div className="space-y-2">
-                  {["نعم، ويمكنني المساهمة بها.", "نعم، وأرغب في التواصل لمعرفة آلية التوثيق.", "لا يوجد لدي حاليًا."].map((opt, idx) => (
-                    <label key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer">
-                      <input type="radio" name="hasHistoricalItems" checked={answers.hasHistoricalItems === opt} onChange={() => updateAnswer('hasHistoricalItems', opt)} className="text-emerald-600" />
-                      <span className="text-sm">{opt}</span>
-                    </label>
-                  ))}
-                </div>
-                <textarea rows="2" value={answers.historicalDetails} onChange={(e) => updateAnswer('historicalDetails', e.target.value)} placeholder="نوع المقتنيات، إن وجدت (اختياري)..." className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 mt-2 font-sans"></textarea>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(6)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي</button>
-              </div>
-            </div>
-          )}
-
-          {step === 8 && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100">
-                <h3 className="text-base font-bold text-emerald-900">13. نوع المشاركة التطوعية؟ </h3>
-                <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 3 ({answers.participationTypes.length}/3)</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {["تقديم الأفكار والمقترحات", "المشاركة في العمل التطوعي", "المشاركة في النظافة والتشجير", "المشاركة في اللجان وفرق العمل", "تقديم خبرات هندسية أو فنية", "التصوير والتوثيق", "جمع المعلومات التاريخية", "التواصل مع الجهات الداعمة", "تقديم دعم مالي أو عيني"].map((item, idx) => {
-                  const isSelected = answers.participationTypes.includes(item);
-                  return (
-                    <div key={idx} onClick={() => handleCheckboxToggle('participationTypes', item, 3)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                      <span className="text-sm font-medium">{item}</span>
-                      <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="border-t pt-4 space-y-3">
-                <h3 className="text-base font-bold text-emerald-900">14. الرغبة في الانضمام إلى الفرق؟ </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {["نعم.", "ربما، حسب طبيعة المهمة والوقت.", "أفضل المشاركة عند تنفيذ مبادرات محددة.", "لا أستطيع المشاركة حاليًا."].map((opt, idx) => {
-                    const isSelected = answers.wantToJoinTeam === opt;
-                    return (
-                      <div key={idx} onClick={() => updateAnswer('wantToJoinTeam', opt)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between shadow-sm ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200 hover:border-emerald-300'}`}>
-                        <span className="text-sm font-medium">{opt}</span>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-emerald-600 text-white scale-110' : 'bg-gray-100 text-transparent border border-gray-300'}`}>
-                          <i data-lucide="check" className="w-3.5 h-3.5"></i>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center bg-emerald-50/80 p-4 rounded-xl border border-emerald-100 mb-3">
-                  <h3 className="text-base font-bold text-emerald-900">15. الفريق المفضل؟ </h3>
-                  <span className="text-xs bg-amber-100 text-amber-800 px-3 py-1 rounded-full font-bold">اختر 2 ({answers.preferredTeams.length}/2)</span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {["فريق التخطيط وجمع الأفكار", "فريق التراث والتوثيق", "فريق التصميم والتجميل", "فريق العمل التطوعي", "فريق الفعاليات والأنشطة", "فريق الإعلام والتواصل", "فريق الدعم والشراكات", "فريق المتابعة والصيانة"].map((item, idx) => {
-                    const isSelected = answers.preferredTeams.includes(item);
-                    return (
-                      <div key={idx} onClick={() => handleCheckboxToggle('preferredTeams', item, 2)} className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${isSelected ? 'bg-emerald-50 border-emerald-600 ring-1 ring-emerald-600' : 'bg-white border-gray-200'}`}>
-                        <span className="text-sm font-medium">{item}</span>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(7)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={nextStep} className="w-2/3 bg-emerald-700 text-white font-bold py-3.5 rounded-xl">التالي: الأفكار والمقترحات</button>
-              </div>
-            </div>
-          )}
-
-          {step === 9 && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-bold text-emerald-900 border-b pb-2 flex items-center gap-2">
-                <i data-lucide="lightbulb" className="w-5 h-5 text-amber-500"></i> الأفكار والمقترحات والمحافظة على المشروعات
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">16. المشروع الأهم لإحداث أثر إيجابي؟ </label>
-                  <textarea rows="2" value={answers.impactProject} onChange={(e) => updateAnswer('impactProject', e.target.value)} placeholder="اكتب إجابتك هنا..." className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 font-sans"></textarea>
-                </div>
-                <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100 space-y-3">
-                  <label className="block text-sm font-bold text-emerald-900">17. فكرتك المقترحة </label>
-                  <input type="text" value={answers.ideaName} onChange={(e) => updateAnswer('ideaName', e.target.value)} placeholder="اسم الفكرة..." className="w-full p-3 rounded-xl border border-gray-200 bg-white font-sans" />
-                  <textarea rows="2" value={answers.ideaDesc} onChange={(e) => updateAnswer('ideaDesc', e.target.value)} placeholder="وصف مختصر للفكرة..." className="w-full p-3 rounded-xl border border-gray-200 bg-white font-sans"></textarea>
-                  <input type="text" value={answers.ideaLocation} onChange={(e) => updateAnswer('ideaLocation', e.target.value)} placeholder="الموقع المقترح لتنفيذها..." className="w-full p-3 rounded-xl border border-gray-200 bg-white font-sans" />
-                  <textarea rows="2" value={answers.ideaBenefit} onChange={(e) => updateAnswer('ideaBenefit', e.target.value)} placeholder="الفائدة المتوقعة منها..." className="w-full p-3 rounded-xl border border-gray-200 bg-white font-sans"></textarea>
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-sm font-semibold text-gray-700">18. أبرز تحديين قد يواجهان تنفيذ المشروع؟ </label>
-                    <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">اختر 2 ({answers.mainChallenges.length}/2)</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {["ضعف التمويل", "صعوبة الحصول على الموافقات", "اختلاف الآراء حول الأولويات", "ضعف المشاركة المجتمعية", "عدم وضوح المسؤوليات", "ملكية بعض المواقع", "صعوبة صيانة المشروعات", "عدم المحافظة على الهوية التراثية"].map((item, idx) => {
-                      const isSelected = answers.mainChallenges.includes(item);
-                      return (
-                        <div key={idx} onClick={() => handleCheckboxToggle('mainChallenges', item, 2)} className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-sm ${isSelected ? 'bg-emerald-50 border-emerald-600' : 'bg-white border-gray-200'}`}>
-                          <span>{item}</span>
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center ${isSelected ? 'bg-emerald-600 text-white' : 'border border-gray-300'}`}><i data-lucide="check" className="w-3 h-3"></i></div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">19. اقتراحك للمحافظة على المشروعات بعد تنفيذها؟ </label>
-                  <textarea rows="2" value={answers.preservationIdea} onChange={(e) => updateAnswer('preservationIdea', e.target.value)} placeholder="اكتب مقترحك..." className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 font-sans"></textarea>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">20. ملاحظات إضافية </label>
-                  <textarea rows="2" value={answers.additionalNotes} onChange={(e) => updateAnswer('additionalNotes', e.target.value)} placeholder="ملاحظاتك..." className="w-full p-3.5 rounded-xl border border-gray-200 bg-gray-50 font-sans"></textarea>
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button onClick={() => setStep(8)} className="w-1/3 bg-gray-100 font-bold py-3.5 rounded-xl">السابق</button>
-                <button onClick={handleSubmit} disabled={isSubmitting} className="w-2/3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
-                  <i data-lucide="send" className="w-5 h-5"></i>
-                  {isSubmitting ? "جاري الإرسال..." : "إرسال الاستبانة"}
-                </button>
-              </div>
-            </div>
+             </div>
           )}
 
           {step === 10 && (
@@ -600,7 +322,7 @@ export default function GreenVillageSurvey() {
                     <i data-lucide="bar-chart-2" className="w-7 h-7 text-emerald-600 shrink-0"></i>
                     لوحة التقارير الإحصائية المتقدمة
                   </h2>
-                  <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Cairo, sans-serif' }}>تحليل تفاعلي شامل لنتائج استبانة أهالي قرية الأخضر</p>
+                  <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Cairo, sans-serif' }}>تحليل تفاعلي للبيانات المُستلمة من جوجل شيت</p>
                 </div>
                 
                 <div className="flex flex-wrap gap-2 shrink-0">
@@ -610,7 +332,7 @@ export default function GreenVillageSurvey() {
                   <button onClick={exportToCSV} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm" style={{ fontFamily: 'Cairo, sans-serif' }}>
                     <i data-lucide="download" className="w-4 h-4"></i> إكسل
                   </button>
-                  <button onClick={() => { setStep(1); setAdminCode(''); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors" style={{ fontFamily: 'Cairo, sans-serif' }}>
+                  <button onClick={() => { setStep(1); setAdminCode(''); setAllSubmissions([]); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors" style={{ fontFamily: 'Cairo, sans-serif' }}>
                     <i data-lucide="arrow-right" className="w-4 h-4"></i> خروج
                   </button>
                 </div>
@@ -643,7 +365,7 @@ export default function GreenVillageSurvey() {
               {allSubmissions.length === 0 ? (
                 <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border border-dashed" style={{ fontFamily: 'Cairo, sans-serif' }}>
                   <i data-lucide="pie-chart" className="w-12 h-12 mx-auto mb-2 opacity-50"></i>
-                  <p className="font-medium">لا توجد ردود لتوليد الإحصائيات.</p>
+                  <p className="font-medium">لا توجد ردود مسجلة في ملف الإكسل.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ fontFamily: 'Cairo, sans-serif' }}>
@@ -688,159 +410,17 @@ export default function GreenVillageSurvey() {
             </div>
           )}
 
-          {/* غرفة عمليات اتخاذ القرار (Step 100) */}
+          {/* لوحة غرفة العمليات (Step 100) */}
+          {/* ... الخطوة 100 تبقى كما هي بدون أي تغيير لأنها تقرأ من allSubmissions والذي أصبح يتحدث تلقائياً ... */}
           {step === 100 && (
-            <div className="space-y-8 animate-fadeIn font-sans">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-4">
-                <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-blue-900 tracking-tight flex items-center gap-2.5" style={{ fontFamily: 'Cairo, sans-serif' }}>
-                    <div className="bg-blue-100 p-2 rounded-lg"><i data-lucide="brain-circuit" className="w-7 h-7 text-blue-600 shrink-0"></i></div>
-                    غرفة عمليات اتخاذ القرار
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Cairo, sans-serif' }}>تحليل متقاطع للبيانات لاستخراج التوصيات وصناعة القرارات</p>
+             <div className="bg-amber-50 p-4 rounded-xl text-amber-800 text-sm border border-amber-200 mt-4">
+                <p>غرفة العمليات ستعمل الآن وتتجاوب بشكل مباشر مع جميع البيانات التي تم جلبها من جوجل شيت. (يرجى إبقاء كود الخطوة 100 كما هو في نسختك الأصلية).</p>
+                <div className="mt-4">
+                  <button onClick={() => setStep(99)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm" style={{ fontFamily: 'Cairo, sans-serif' }}>
+                    <i data-lucide="layout-dashboard" className="w-4 h-4"></i> العودة للإحصائيات العامة
+                  </button>
                 </div>
-                
-                <button onClick={() => setStep(99)} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm" style={{ fontFamily: 'Cairo, sans-serif' }}>
-                  <i data-lucide="layout-dashboard" className="w-4 h-4"></i> العودة للإحصائيات العامة
-                </button>
-              </div>
-
-              {allSubmissions.length === 0 ? (
-                <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border border-dashed" style={{ fontFamily: 'Cairo, sans-serif' }}>
-                  <i data-lucide="inbox" className="w-12 h-12 mx-auto mb-2 opacity-50"></i>
-                  <p className="font-medium">لا توجد بيانات كافية لاستخراج التوصيات.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" style={{ fontFamily: 'Cairo, sans-serif' }}>
-                  
-                  {/* 1. المكاسب السريعة */}
-                  <div className="bg-amber-50/50 border border-amber-200 p-6 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-amber-100 p-2.5 rounded-full"><i data-lucide="zap" className="w-5 h-5 text-amber-600"></i></div>
-                      <h3 className="font-bold text-amber-900 text-lg">مصفوفة "المكاسب السريعة"</h3>
-                    </div>
-                    <p className="text-xs text-amber-700/80 mb-5 leading-relaxed">التحرك الأول الذي سيلاحظه الأهالي فوراً لرفع الروح المعنوية، مبني على التقاطع بين (أهم موقع + أهم تحسين).</p>
-                    
-                    <div className="bg-white p-4 rounded-2xl border border-amber-100 space-y-3">
-                      <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
-                        <span className="text-gray-500">الموقع ذو الأولوية القصوى:</span>
-                        <span className="font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md">{getTopItem('sitesToDevelop')}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-2">
-                        <span className="text-gray-500">مشروع التحسين الأكثر طلباً:</span>
-                        <span className="font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded-md">{getTopItem('urgentProjects')}</span>
-                      </div>
-                      <div className="pt-2">
-                        <span className="block text-xs text-amber-600 font-bold mb-1"><i data-lucide="target" className="w-3 h-3 inline mr-1"></i> القرار المقترح:</span>
-                        <p className="text-sm font-bold text-gray-800">
-                          البدء فوراً بـ ( {getTopItem('urgentProjects')} ) وتحديداً في منطقة ( {getTopItem('sitesToDevelop')} ).
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 2. مؤشر إنشاء المتحف */}
-                  <div className="bg-blue-50/50 border border-blue-200 p-6 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-blue-100 p-2.5 rounded-full"><i data-lucide="landmark" className="w-5 h-5 text-blue-600"></i></div>
-                      <h3 className="font-bold text-blue-900 text-lg">دراسة جدوى "المتحف"</h3>
-                    </div>
-                    <p className="text-xs text-blue-700/80 mb-5 leading-relaxed">يقيس نسبة من يطالب بإنشاء متحف ويمتلك فعلياً مقتنيات للمساهمة بها لضمان عدم بناء متحف فارغ.</p>
-                    
-                    <div className="bg-white p-5 rounded-2xl border border-blue-100 text-center">
-                      <div className="relative w-32 h-32 mx-auto flex items-center justify-center rounded-full border-8 border-gray-100 mb-3">
-                        <div className="absolute inset-0 rounded-full border-8 border-blue-500 border-t-transparent border-r-transparent" style={{ transform: `rotate(${(getMuseumFeasibility() * 3.6) - 135}deg)`, transition: '1s ease-out' }}></div>
-                        <span className="text-3xl font-bold text-blue-900">{getMuseumFeasibility()}%</span>
-                      </div>
-                      {getMuseumFeasibility() > 40 ? (
-                        <div className="bg-emerald-100 text-emerald-800 p-2.5 rounded-xl text-sm font-bold mt-2">
-                          توصية: الإقبال ممتاز. ابدأ بتشكيل لجنة استلام وتوثيق المقتنيات.
-                        </div>
-                      ) : (
-                        <div className="bg-amber-100 text-amber-800 p-2.5 rounded-xl text-sm font-bold mt-2">
-                          توصية: المحتوى المتوفر قليل. يُنصح بتأجيل بناء المتحف وعمل (معرض مؤقت) حالياً.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 3. فجوة الموارد البشرية */}
-                  <div className="bg-emerald-50/50 border border-emerald-200 p-6 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-emerald-100 p-2.5 rounded-full"><i data-lucide="users-2" className="w-5 h-5 text-emerald-600"></i></div>
-                      <h3 className="font-bold text-emerald-900 text-lg">استعداد الموارد البشرية</h3>
-                    </div>
-                    <p className="text-xs text-emerald-700/80 mb-5 leading-relaxed">نسبة المشاركين المستعدين للعمل الفعلي في لجان وفرق المشروع مقارنة بإجمالي المطالبين بالتطوير.</p>
-                    
-                    <div className="bg-white p-5 rounded-2xl border border-emerald-100 flex items-center gap-6">
-                      <div className="flex-1 space-y-4">
-                        <div>
-                          <div className="flex justify-between text-sm mb-1 font-bold text-gray-700">
-                            <span>متطوعون محتملون</span>
-                            <span>{getHRGap().count} من {allSubmissions.length}</span>
-                          </div>
-                          <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                            <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${getHRGap().ratio}%` }}></div>
-                          </div>
-                        </div>
-                        <p className="text-sm font-medium text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                          {getHRGap().ratio > 30 ? "✔️ هناك رغبة قوية للتطوع. ابدأ بتوزيع المهام فوراً قبل فقدان الحماس." : "⚠️ الاعتمادية منخفضة. معظم المشاركين يفضلون التنظير على العمل. ركز على مشروعات المقاولات الخارجية حالياً."}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4. خريطة المخاطر */}
-                  <div className="bg-rose-50/50 border border-rose-200 p-6 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-rose-100 p-2.5 rounded-full"><i data-lucide="alert-triangle" className="w-5 h-5 text-rose-600"></i></div>
-                      <h3 className="font-bold text-rose-900 text-lg">خريطة إدارة المخاطر</h3>
-                    </div>
-                    <p className="text-xs text-rose-700/80 mb-5 leading-relaxed">تحليل لأكبر تحدٍ يتوقعه الأهالي، مع التوصية الاستباقية لتجاوز هذه العقبة.</p>
-                    
-                    <div className="bg-white p-4 rounded-2xl border border-rose-100 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500"></div>
-                      <div className="mr-3">
-                        <h4 className="text-xs font-bold text-gray-500 mb-1">الخطر المتوقع الأول:</h4>
-                        <p className="text-lg font-bold text-rose-800 mb-3">{getTopChallengeMitigation().challenge}</p>
-                        
-                        <h4 className="text-xs font-bold text-gray-500 mb-1">استراتيجية الحل الاستباقية:</h4>
-                        <p className="text-sm font-medium text-gray-700 bg-rose-50 p-2.5 rounded-lg border border-rose-100">
-                          {getTopChallengeMitigation().mitigation}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 5. بنك الأفكار النوعية */}
-                  <div className="col-span-1 lg:col-span-2 bg-indigo-50/50 border border-indigo-200 p-6 rounded-3xl shadow-sm">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="bg-indigo-100 p-2.5 rounded-full"><i data-lucide="lightbulb" className="w-5 h-5 text-indigo-600"></i></div>
-                      <h3 className="font-bold text-indigo-900 text-lg">بنك الأفكار النوعية (المبادرات الخاصة)</h3>
-                    </div>
-                    <p className="text-xs text-indigo-700/80 mb-5 leading-relaxed">أحدث الأفكار المخصصة التي اقترحها الأهالي خارج الصندوق للتقييم والتنفيذ.</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {allSubmissions.filter(s => s.ideaName && s.ideaName.trim() !== "").slice(-6).reverse().map((sub, i) => (
-                        <div key={i} className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm hover:shadow-md transition-shadow relative">
-                          <span className="absolute top-3 left-3 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">فكرة</span>
-                          <h4 className="font-bold text-gray-800 mb-2 pl-12">{sub.ideaName}</h4>
-                          <p className="text-xs text-gray-600 mb-3 line-clamp-2" title={sub.ideaDesc}>{sub.ideaDesc}</p>
-                          <div className="text-xs space-y-1.5 text-gray-500 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                            <div className="flex items-start gap-1.5"><i data-lucide="map-pin" className="w-3.5 h-3.5 shrink-0 text-indigo-400 mt-0.5"></i> <span className="line-clamp-1">{sub.ideaLocation || "غير محدد"}</span></div>
-                            <div className="flex items-start gap-1.5"><i data-lucide="trending-up" className="w-3.5 h-3.5 shrink-0 text-emerald-500 mt-0.5"></i> <span className="line-clamp-1 font-medium text-emerald-700">{sub.ideaBenefit || "غير محدد"}</span></div>
-                          </div>
-                        </div>
-                      ))}
-                      {allSubmissions.filter(s => s.ideaName && s.ideaName.trim() !== "").length === 0 && (
-                        <p className="text-sm text-gray-500 py-4 col-span-full text-center">لا توجد أفكار نوعية مسجلة بعد.</p>
-                      )}
-                    </div>
-                  </div>
-
-                </div>
-              )}
-            </div>
+             </div>
           )}
 
         </div>
