@@ -109,17 +109,39 @@ export default function GreenVillageSurvey() {
     if (adminCode === 'AsA307') {
       setIsFetchingData(true);
       try {
-        const response = await fetch(GOOGLE_SCRIPT_URL);
-        const data = await response.json();
+        // إضافة redirect: "follow" مهمة جداً لروابط جوجل شيت
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "GET",
+          redirect: "follow" 
+        });
         
-        // تحويل النصوص المدمجة بفواصل إلى مصفوفات (Arrays) لتعمل الإحصائيات بشكل سليم
+        // نقرأ الاستجابة كنص أولاً للتأكد من أنها ليست صفحة خطأ من جوجل
+        const rawText = await response.text();
+        
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseError) {
+          console.error("البيانات المستلمة ليست JSON صالح:", rawText);
+          alert("الرابط لا يُرجع بيانات صحيحة. يرجى التأكد من إعدادات جوجل شيت.");
+          setIsFetchingData(false);
+          return;
+        }
+
+        // إذا أرجع السكريبت خطأ مبرمج
+        if (data.error) {
+          console.error("خطأ من جوجل شيت:", data.error);
+          alert("حدث خطأ داخل جوجل شيت: " + data.error);
+          setIsFetchingData(false);
+          return;
+        }
+        
         const arrayFields = ['priorities', 'futureVision', 'urgentProjects', 'sitesToDevelop', 'falajProposals', 'mustahActivities', 'futureProjects', 'museumContents', 'participationTypes', 'preferredTeams', 'mainChallenges'];
         
         const formattedData = data.map(row => {
           const newRow = { ...row };
           arrayFields.forEach(field => {
             if (typeof newRow[field] === 'string') {
-              // إذا كان جوجل شيت يحفظها كنص مفصول بفاصلة، نقوم بتحويله إلى مصفوفة مجدداً
               newRow[field] = newRow[field].split(',').map(s => s.trim()).filter(Boolean);
             }
           });
@@ -129,8 +151,8 @@ export default function GreenVillageSurvey() {
         setAllSubmissions(formattedData);
         setStep(99);
       } catch (error) {
-        console.error("خطأ في جلب البيانات:", error);
-        alert("حدث خطأ أثناء جلب البيانات من جوجل شيت. تأكد من إعداد دالة doGet.");
+        console.error("خطأ في الاتصال:", error);
+        alert("فشل الاتصال بجوجل شيت. تحقق من الرابط أو اتصال الإنترنت.");
       } finally {
         setIsFetchingData(false);
       }
