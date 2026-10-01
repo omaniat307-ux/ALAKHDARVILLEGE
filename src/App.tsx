@@ -4,44 +4,18 @@ export default function GreenVillageSurvey() {
   const [step, setStep] = useState(1);
   const [adminCode, setAdminCode] = useState('');
   const [answers, setAnswers] = useState({
-    name: '',
-    phone: '',
-    priorities: [],
-    futureVision: [],
-    urgentProjects: [],
-    urgentSite1: '',
-    urgentSite2: '',
-    urgentSite3: '',
-    sitesToDevelop: [],
-    falajProposals: [],
-    mustahActivities: [],
-    futureProjects: [],
-    museumContents: [],
-    hasHistoricalItems: '',
-    historicalDetails: '',
-    participationTypes: [],
-    wantToJoinTeam: '',
-    preferredTeams: [],
-    impactProject: '',
-    ideaName: '',
-    ideaDesc: '',
-    ideaLocation: '',
-    ideaBenefit: '',
-    mainChallenges: [],
-    preservationIdea: '',
-    additionalNotes: ''
+    name: '', phone: '', priorities: [], futureVision: [], urgentProjects: [], urgentSite1: '',
+    urgentSite2: '', urgentSite3: '', sitesToDevelop: [], falajProposals: [], mustahActivities: [],
+    futureProjects: [], museumContents: [], hasHistoricalItems: '', historicalDetails: '',
+    participationTypes: [], wantToJoinTeam: '', preferredTeams: [], impactProject: '', ideaName: '',
+    ideaDesc: '', ideaLocation: '', ideaBenefit: '', mainChallenges: [], preservationIdea: '', additionalNotes: ''
   });
   
-  const [allSubmissions, setAllSubmissions] = useState(() => {
-    try {
-      const saved = localStorage.getItem('survey_submissions');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
+  const [allSubmissions, setAllSubmissions] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFetchingData, setIsFetchingData] = useState(false);
+
+  // ⚠️ استبدل هذا الرابط بالرابط الجديد الخاص بك بعد النشر
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnmgpXPpYioWTVguMDDSPfURM-_fBI6LGSM9WC6D3OEZheo2F61n6Kca1YZyzZXT_zYg/exec";
 
   useEffect(() => {
@@ -115,10 +89,6 @@ export default function GreenVillageSurvey() {
     if (!validateStep()) return;
     setIsSubmitting(true);
     try {
-      const updatedList = [...allSubmissions, answers];
-      setAllSubmissions(updatedList);
-      localStorage.setItem('survey_submissions', JSON.stringify(updatedList));
-
       await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -127,9 +97,63 @@ export default function GreenVillageSurvey() {
       setStep(10);
     } catch (error) {
       console.error("خطأ في الإرسال:", error);
+      alert("حدث خطأ أثناء الإرسال، تأكد من الاتصال بالإنترنت و جرب مرة أخرى.");
       setStep(10);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAdminLogin = async () => {
+    if (adminCode === 'AsA307') {
+      setIsFetchingData(true);
+      try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "GET",
+          redirect: "follow"
+        });
+        
+        const rawText = await response.text();
+        
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseError) {
+          console.error("البيانات المستلمة ليست JSON صالح:", rawText);
+          alert("الرابط لا يُرجع بيانات صحيحة. يرجى التأكد من إعدادات دالة doGet في جوجل شيت.");
+          setIsFetchingData(false);
+          return;
+        }
+
+        if (data.error) {
+          console.error("خطأ من جوجل شيت:", data.error);
+          alert("حدث خطأ داخل جوجل شيت: " + data.error);
+          setIsFetchingData(false);
+          return;
+        }
+        
+        const arrayFields = ['priorities', 'futureVision', 'urgentProjects', 'sitesToDevelop', 'falajProposals', 'mustahActivities', 'futureProjects', 'museumContents', 'participationTypes', 'preferredTeams', 'mainChallenges'];
+        
+        const formattedData = data.map(row => {
+          const newRow = { ...row };
+          arrayFields.forEach(field => {
+            if (typeof newRow[field] === 'string') {
+              newRow[field] = newRow[field].split(',').map(s => s.trim()).filter(Boolean);
+            }
+          });
+          return newRow;
+        });
+
+        setAllSubmissions(formattedData);
+        setStep(99);
+      } catch (error) {
+        console.error("خطأ في الاتصال:", error);
+        alert("فشل الاتصال بجوجل شيت. تحقق من الرابط أو اتصال الإنترنت أو سياسة الحماية في المتصفح.");
+      } finally {
+        setIsFetchingData(false);
+      }
+    } else {
+      alert("الرمز غير صحيح.");
     }
   };
 
@@ -140,8 +164,10 @@ export default function GreenVillageSurvey() {
       const val = sub[key];
       if (Array.isArray(val)) {
         val.forEach(item => {
-          counts[item] = (counts[item] || 0) + 1;
-          totalVotes++;
+          if (item) {
+            counts[item] = (counts[item] || 0) + 1;
+            totalVotes++;
+          }
         });
       } else if (val) {
         counts[val] = (counts[val] || 0) + 1;
@@ -185,7 +211,6 @@ export default function GreenVillageSurvey() {
     document.body.removeChild(link);
   };
 
-  // --- دوال التحليل المتقاطع لصفحة القرارات الذكية ---
   const getTopItem = (key) => {
     const { sorted } = getStatCounts(key);
     return sorted.length > 0 ? sorted[0][0] : "قيد الانتظار";
@@ -244,8 +269,12 @@ export default function GreenVillageSurvey() {
                   <i data-lucide="lock" className="w-4 h-4 text-emerald-700 shrink-0"></i>
                   <input type="password" value={adminCode} onChange={(e) => setAdminCode(e.target.value)} placeholder="أدخل رمز لوحة الإحصائيات (للمشرفين)..." className="w-full p-2.5 text-sm rounded-xl border border-gray-300 bg-white outline-none focus:border-emerald-600 font-sans" />
                 </div>
-                <button onClick={() => { adminCode === 'AsA307' ? setStep(99) : alert("الرمز غير صحيح."); }} className="w-full sm:w-auto bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shrink-0 font-sans">
-                  دخول التقارير
+                <button onClick={handleAdminLogin} disabled={isFetchingData} className="w-full sm:w-auto bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shrink-0 font-sans flex justify-center items-center gap-2 disabled:opacity-70">
+                  {isFetchingData ? (
+                    <><i data-lucide="loader-2" className="w-4 h-4 animate-spin"></i> جاري التحميل...</>
+                  ) : (
+                    "دخول التقارير"
+                  )}
                 </button>
               </div>
               <div className="bg-emerald-50 border-r-4 border-emerald-600 p-4 rounded-xl text-sm text-emerald-900 leading-relaxed flex items-start gap-3">
@@ -591,7 +620,6 @@ export default function GreenVillageSurvey() {
             </div>
           )}
 
-          {/* لوحة التقارير الأساسية (Step 99) */}
           {step === 99 && (
             <div className="space-y-8 animate-fadeIn font-sans">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-4">
@@ -600,7 +628,7 @@ export default function GreenVillageSurvey() {
                     <i data-lucide="bar-chart-2" className="w-7 h-7 text-emerald-600 shrink-0"></i>
                     لوحة التقارير الإحصائية المتقدمة
                   </h2>
-                  <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Cairo, sans-serif' }}>تحليل تفاعلي شامل لنتائج استبانة أهالي قرية الأخضر</p>
+                  <p className="text-xs text-gray-500 mt-1" style={{ fontFamily: 'Cairo, sans-serif' }}>تحليل تفاعلي للبيانات المُستلمة من جوجل شيت</p>
                 </div>
                 
                 <div className="flex flex-wrap gap-2 shrink-0">
@@ -610,7 +638,7 @@ export default function GreenVillageSurvey() {
                   <button onClick={exportToCSV} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm" style={{ fontFamily: 'Cairo, sans-serif' }}>
                     <i data-lucide="download" className="w-4 h-4"></i> إكسل
                   </button>
-                  <button onClick={() => { setStep(1); setAdminCode(''); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors" style={{ fontFamily: 'Cairo, sans-serif' }}>
+                  <button onClick={() => { setStep(1); setAdminCode(''); setAllSubmissions([]); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors" style={{ fontFamily: 'Cairo, sans-serif' }}>
                     <i data-lucide="arrow-right" className="w-4 h-4"></i> خروج
                   </button>
                 </div>
@@ -643,7 +671,7 @@ export default function GreenVillageSurvey() {
               {allSubmissions.length === 0 ? (
                 <div className="text-center py-16 text-gray-400 bg-gray-50 rounded-2xl border border-dashed" style={{ fontFamily: 'Cairo, sans-serif' }}>
                   <i data-lucide="pie-chart" className="w-12 h-12 mx-auto mb-2 opacity-50"></i>
-                  <p className="font-medium">لا توجد ردود لتوليد الإحصائيات.</p>
+                  <p className="font-medium">لا توجد ردود مسجلة في ملف الإكسل.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ fontFamily: 'Cairo, sans-serif' }}>
@@ -688,7 +716,6 @@ export default function GreenVillageSurvey() {
             </div>
           )}
 
-          {/* غرفة عمليات اتخاذ القرار (Step 100) */}
           {step === 100 && (
             <div className="space-y-8 animate-fadeIn font-sans">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-4">
