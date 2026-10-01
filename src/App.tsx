@@ -16,7 +16,7 @@ export default function GreenVillageSurvey() {
   const [isFetchingData, setIsFetchingData] = useState(false);
 
   // ⚠️ استبدل هذا الرابط بالرابط الجديد الخاص بك بعد النشر
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnmgpXPpYioWTVguMDDSPfURM-_fBI6LGSM9WC6D3OEZheo2F61n6Kca1YZyzZXT_zYg/exec";
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyNB8ULfbGX9ikoSN0m1VaXqh3stQfueTEk6UXkBaienpj4eJdDO3E2NOPqV_X6tEBNA/exec";
 
   useEffect(() => {
     if (window.lucide) {
